@@ -1,0 +1,35 @@
+syntax = "proto3";
+package tracking.v1;
+
+option go_package = "github.com/AleeCao/LogiTrack/gen/go/tracking/v1";
+
+import "google/protobuf/timestamp.proto";
+
+enum TruckStatus {
+  STATE_UNSPECIFIED = 0;
+  STOPPED = 1;
+  ON_ITS_WAY = 2;
+  EMERGENCY = 3;
+}
+
+enum DeliveryStatus {
+  CONTINUE = 0;
+  ABORT = 1;
+  COME_BACK = 2;
+}
+
+message Location {
+  string truck_id = 1;
+  double longitude = 2;
+  double latitude = 3;
+  google.protobuf.Timestamp timestamp = 4;
+  TruckStatus status = 5;
+}
+
+message LocationResponse {
+  DeliveryStatus status = 1;
+}
+
+service Tracking {
+  rpc GetLocation(stream Location) returns (stream LocationResponse);
+}
