@@ -4,7 +4,7 @@ import (
 	"io"
 
 	v1 "github.com/AleeCao/LogiTrack/gen/go/tracking/v1"
-	"github.com/AleeCao/LogiTrack/internal/ingestion/domain"
+	"github.com/AleeCao/LogiTrack/internal/domain"
 	"github.com/AleeCao/LogiTrack/internal/ingestion/ports"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

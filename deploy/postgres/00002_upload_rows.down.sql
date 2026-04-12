@@ -1,3 +1,1 @@
-TRUNCATE TABLE driver_assignment, shipments, users, trucks, drivers RESTART IDENTITY;
-
-DROP EXTENSION IF EXISTS "pgcrypto";
+DROP TABLE IF EXISTS location_history;

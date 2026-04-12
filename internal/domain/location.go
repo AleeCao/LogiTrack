@@ -6,11 +6,11 @@ import (
 )
 
 type Location struct {
-	TruckID     string
-	Longitude   float64
-	Latitude    float64
-	UpdatedAt   time.Time
-	TruckStatus string
+	TruckID     string    `redis:"truck_ID"`
+	Longitude   float64   `redis:"longitude"`
+	Latitude    float64   `redis:"latitude"`
+	UpdatedAt   time.Time `redis:"updated_at"`
+	TruckStatus string    `redis:"truck_status"`
 }
 
 func (l *Location) Validate() error {

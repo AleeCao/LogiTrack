@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AleeCao/LogiTrack/internal/ingestion/domain"
+	"github.com/AleeCao/LogiTrack/internal/domain"
 	"github.com/AleeCao/LogiTrack/internal/ingestion/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

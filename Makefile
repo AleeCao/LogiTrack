@@ -2,7 +2,7 @@
 include .env
 export
 
-# Variable for the DB Connection String
+# Variable for the DB Connection
 DB_URL=postgres://$(DB_USER):$(DB_PASSWORD)@localhost:$(DB_PORT)/$(DB_NAME)?sslmode=disable
 
 .PHONY: migrate-up migrate-down

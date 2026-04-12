@@ -3,7 +3,7 @@ package ports
 import (
 	"context"
 
-	"github.com/AleeCao/LogiTrack/internal/ingestion/domain"
+	"github.com/AleeCao/LogiTrack/internal/domain"
 )
 
 type LocationProcessor interface {

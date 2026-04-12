@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/AleeCao/LogiTrack/internal/ingestion/domain"
+	"github.com/AleeCao/LogiTrack/internal/domain"
 	"github.com/AleeCao/LogiTrack/internal/ingestion/ports"
 	"github.com/segmentio/kafka-go"
 )
@@ -21,6 +21,7 @@ func NewProducer(add string, topic string) ports.EventProducer {
 		Topic:    topic,
 		Balancer: &kafka.LeastBytes{},
 	}
+	fmt.Printf("Producer initialized with topic: %s\n", topic)
 	return &Producer{broker}
 }
 

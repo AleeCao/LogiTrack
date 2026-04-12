@@ -3,7 +3,7 @@ package services
 import (
 	"context"
 
-	"github.com/AleeCao/LogiTrack/internal/ingestion/domain"
+	"github.com/AleeCao/LogiTrack/internal/domain"
 	"github.com/AleeCao/LogiTrack/internal/ingestion/ports"
 )
 

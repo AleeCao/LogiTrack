@@ -4,6 +4,8 @@ package config
 import (
 	"fmt"
 	"log"
+	"path/filepath"
+	"runtime"
 
 	"github.com/spf13/viper"
 )
@@ -23,12 +25,21 @@ type EnvConfig struct {
 	KafkaHost        string `mapstructure:"KAFKA_HOST"`
 	KafkaTopic       string `mapstructure:"KAFKA_TOPIC"`
 	EsPort           string `mapstructure:"ES_PORT"`
+	EsAddr           string `mapstructure:"ES_ADDR"`
 	IngestionSerPort string `mapstructure:"SERVICE_INGESTION_PORT"`
 	IngestionSerHost string `mapstructure:"SERVICE_INGESTION_HOST"`
+	RedisPort        string `mapstructure:"REDIS_PORT"`
+	RedisHost        string `mapstructure:"REDIS_HOST"`
+	RedisPassword    string `mapstructure:"REDIS_PASSWORD"`
 }
 
 func VarConfig() (*EnvConfig, error) {
-	viper.SetConfigFile("../../.env")
+	_, b, _, _ := runtime.Caller(0)
+	basepath := filepath.Dir(b)
+
+	envPath := filepath.Join(basepath, "../../.env")
+
+	viper.SetConfigFile(envPath)
 	err := viper.ReadInConfig()
 	if err != nil {
 		return nil, fmt.Errorf("error loading .env: %w", err)
