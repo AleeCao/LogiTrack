@@ -5,10 +5,11 @@ package ports
 
 import (
 	"context"
+	"sync"
 
 	"github.com/AleeCao/LogiTrack/internal/domain"
 )
 
 type ProcessService interface {
-	ProcessLocation(ctx context.Context, lcn *domain.Location) error
+	ProcessLocation(ctx context.Context, locations <-chan domain.Location, wg *sync.WaitGroup) error
 }

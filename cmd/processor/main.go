@@ -6,8 +6,11 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"runtime"
+	"sync"
 	"syscall"
 
+	"github.com/AleeCao/LogiTrack/internal/domain"
 	"github.com/AleeCao/LogiTrack/internal/processor/adapters"
 	"github.com/AleeCao/LogiTrack/internal/processor/services"
 	"github.com/AleeCao/LogiTrack/pkg/config"
@@ -15,24 +18,26 @@ import (
 )
 
 func main() {
+	mssgBuff := make(chan domain.Location)
+	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	envVar, err := config.VarConfig()
 	if err != nil {
-		log.Fatal("%v", err)
+		log.Fatalf("%v", err)
 	}
 
 	dbPro, err := db.NewDBConnection(envVar)
 	if err != nil {
-		log.Fatal("%v", err)
+		log.Fatalf("%v", err)
 	}
 
 	cacheClient := db.NewRedisConnection(envVar)
 
 	searchEngine, err := db.NewSearchEngine(envVar.EsAddr)
 	if err != nil {
-		log.Fatal("%v", err)
+		log.Fatalf("%v", err)
 	}
 
 	cacheRep := adapters.NewCacheRepository(cacheClient)
@@ -52,9 +57,17 @@ func main() {
 		<-c
 		fmt.Println("shutting down")
 		cancel()
+		close(mssgBuff)
+		wg.Wait()
+		fmt.Println("All workers have processed thier messages.")
 	}()
 
-	if err := consumerWorker.StartConsume(ctx); err != nil {
+	for i := 0; i < runtime.NumCPU(); i++ {
+		wg.Add(1)
+		go processorSvc.ProcessLocation(ctx, mssgBuff, &wg)
+	}
+
+	if err := consumerWorker.StartConsume(ctx, mssgBuff); err != nil {
 		log.Fatalf("Consumer failed: %v", err)
 	}
 }

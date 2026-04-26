@@ -30,13 +30,11 @@ func NewConsumer(add string, topic string, prss ports.ProcessService) *Consumer 
 	return &Consumer{reader, prss}
 }
 
-func (a *Consumer) StartConsume(ctx context.Context) error {
+func (a *Consumer) StartConsume(ctx context.Context, chn chan domain.Location) error {
 	defer a.Reader.Close()
-
 	fmt.Println("start consuming")
 	for {
 		a.Reader.Stats()
-		fmt.Println("Waiting for message...")
 		msg, err := a.Reader.ReadMessage(ctx)
 		if err != nil {
 			log.Printf("failed consuming from broker: %v", err)
@@ -48,9 +46,6 @@ func (a *Consumer) StartConsume(ctx context.Context) error {
 		if err != nil {
 			fmt.Printf("error getting values: %v", err)
 		}
-		err = a.PrssrSvc.ProcessLocation(ctx, &lcn)
-		if err != nil {
-			return err
-		}
+		chn <- lcn
 	}
 }
