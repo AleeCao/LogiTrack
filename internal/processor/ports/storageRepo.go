@@ -7,5 +7,5 @@ import (
 )
 
 type StorageRepository interface {
-	CreateLocationRecord(ctx context.Context, lcn *domain.Location) error
+	InsertLocationRecord(ctx context.Context, lcn *[]*domain.Location) error
 }

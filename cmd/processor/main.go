@@ -18,7 +18,7 @@ import (
 )
 
 func main() {
-	mssgBuff := make(chan domain.Location)
+	workersChan, esChan, cacheChan, storageChan := make(chan *domain.Location, 500), make(chan *domain.Location, 500), make(chan *domain.Location, 500), make(chan *domain.Location, 500)
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -28,7 +28,7 @@ func main() {
 		log.Fatalf("%v", err)
 	}
 
-	dbPro, err := db.NewDBConnection(envVar)
+	dbPro, err := db.NewDBConnection(ctx, envVar)
 	if err != nil {
 		log.Fatalf("%v", err)
 	}
@@ -46,7 +46,9 @@ func main() {
 
 	searchRep := adapters.NewSearchRepo(searchEngine)
 
-	processorSvc := services.NewProcessorService(storageRep, cacheRep, searchRep)
+	processorSvc := services.NewProcessorService(cacheRep, searchRep)
+
+	batcherSvc := services.NewBatcherService(storageRep, cacheRep)
 
 	consumerAddr := fmt.Sprintf("%s:%s", envVar.KafkaHost, envVar.KafkaPort)
 	consumerWorker := adapters.NewConsumer(consumerAddr, envVar.KafkaTopic, processorSvc)
@@ -57,17 +59,27 @@ func main() {
 		<-c
 		fmt.Println("shutting down")
 		cancel()
-		close(mssgBuff)
+		close(esChan)
+		close(workersChan)
+		close(cacheChan)
+		close(storageChan)
 		wg.Wait()
 		fmt.Println("All workers have processed thier messages.")
 	}()
 
-	for i := 0; i < runtime.NumCPU(); i++ {
-		wg.Add(1)
-		go processorSvc.ProcessLocation(ctx, mssgBuff, &wg)
+	for i := 0; i < (runtime.NumCPU() / 4); i++ {
+		wg.Add(2)
+		go processorSvc.ProcessLocationRecord(ctx, workersChan, cacheChan, storageChan, &wg)
+		go processorSvc.ProcessLocationSearch(ctx, esChan, &wg)
 	}
 
-	if err := consumerWorker.StartConsume(ctx, mssgBuff); err != nil {
+	for i := 0; i < 2; i++ {
+		wg.Add(2)
+		go batcherSvc.CacheBatcher(ctx, cacheChan, &wg)
+		go batcherSvc.DbBatcher(ctx, storageChan, &wg)
+	}
+
+	if err := consumerWorker.StartConsume(ctx, workersChan, esChan); err != nil {
 		log.Fatalf("Consumer failed: %v", err)
 	}
 }

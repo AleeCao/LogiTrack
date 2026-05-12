@@ -11,5 +11,6 @@ import (
 )
 
 type ProcessService interface {
-	ProcessLocation(ctx context.Context, locations <-chan domain.Location, wg *sync.WaitGroup) error
+	ProcessLocationRecord(ctx context.Context, locations <-chan *domain.Location, cacheChan chan *domain.Location, storageChan chan *domain.Location, wg *sync.WaitGroup) error
+	ProcessLocationSearch(ctx context.Context, locations <-chan *domain.Location, wg *sync.WaitGroup) error
 }

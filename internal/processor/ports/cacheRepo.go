@@ -7,6 +7,6 @@ import (
 )
 
 type CacheRepository interface {
-	SetLocationRecord(ctx context.Context, lcn *domain.Location) error
+	SendBatch(ctx context.Context, buffer *[]*domain.Location)
 	GetLocationRecord(ctx context.Context, truckID string) (*domain.Location, error)
 }

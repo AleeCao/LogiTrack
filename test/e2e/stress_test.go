@@ -2,7 +2,6 @@ package e2e_test
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"math/rand"
 	"testing"
@@ -12,6 +11,7 @@ import (
 	"github.com/AleeCao/LogiTrack/pkg/config"
 	"github.com/AleeCao/LogiTrack/pkg/db"
 	"github.com/elastic/go-elasticsearch/v9"
+	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -46,9 +46,10 @@ func TestStress_FiftyTruckFlow(t *testing.T) {
 
 	// Postgres
 	fmt.Println("  - Connecting to Postgres...")
-	pgDB, err := db.NewDBConnection(env)
-	require.NoError(t, err, "Failed to connect to Postgres")
-	defer pgDB.Close()
+    pgDB, err := db.NewDBConnection(ctx, env)
+    require.NoError(t, err, "Failed to connect to Postgres")
+    // pgx.Conn Close requires a context and returns an error. Ignore close error in test teardown.
+    defer func() { _ = pgDB.Close(ctx) }()
 	fmt.Println("  - Postgres connected")
 
 	// Redis
@@ -87,10 +88,10 @@ func TestStress_FiftyTruckFlow(t *testing.T) {
 	fmt.Println("\n[STEP 4] Ensuring trucks exist in Postgres...")
 
 	for i, truckID := range truckIDs {
-		_, err = pgDB.ExecContext(ctx,
-			"INSERT INTO trucks (truck_id, model) VALUES ($1, $2) ON CONFLICT (truck_id) DO NOTHING",
-			truckID, truckModels[i])
-		require.NoError(t, err, fmt.Sprintf("Failed to insert truck %s", truckID))
+        _, err = pgDB.Exec(ctx,
+            "INSERT INTO trucks (truck_id, model) VALUES ($1, $2) ON CONFLICT (truck_id) DO NOTHING",
+            truckID, truckModels[i])
+        require.NoError(t, err, fmt.Sprintf("Failed to insert truck %s", truckID))
 		if (i+1)%10 == 0 {
 			fmt.Printf("  - Inserted %d/%d trucks\n", i+1, numTrucks)
 		}
@@ -102,12 +103,12 @@ func TestStress_FiftyTruckFlow(t *testing.T) {
 	// =============================================================================
 	fmt.Println("\n[STEP 5] Connecting to Ingestion Service via gRPC...")
 
-	ingestAddr := fmt.Sprintf("localhost:%s", env.IngestionSerPort)
-	conn, err := grpc.NewClient(ingestAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	require.NoError(t, err, "Failed to connect to Ingestion Service")
-	defer conn.Close()
+    ingestAddr := fmt.Sprintf("localhost:%s", env.IngestionSerPort)
+    conn, err := grpc.DialContext(ctx, ingestAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+    require.NoError(t, err, "Failed to connect to Ingestion Service")
+    defer func() { _ = conn.Close() }()
 
-	client := v1.NewTrackingClient(conn)
+    client := v1.NewTrackingClient(conn)
 	fmt.Println("[STEP 5] gRPC connection established")
 
 	// =============================================================================
@@ -215,9 +216,16 @@ func TestStress_FiftyTruckFlow(t *testing.T) {
 	fmt.Printf("  - Total time: %v\n", time.Since(startTime))
 
 	// =============================================================================
-	// STEP 7: Final Verification
+	// STEP 7: Wait for async processing
 	// =============================================================================
-	fmt.Println("\n[STEP 7] Final verification of all 50 trucks...")
+	fmt.Println("\n[STEP 7] Waiting 5 seconds for async processing to complete...")
+	time.Sleep(5 * time.Second)
+	fmt.Println("[STEP 7] Wait complete")
+
+	// =============================================================================
+	// STEP 8: Final Verification
+	// =============================================================================
+	fmt.Println("\n[STEP 8] Final verification of all 50 trucks...")
 
 	verifyTrucks(ctx, t, truckIDs, pgDB, redisClient, esClient)
 
@@ -236,7 +244,7 @@ func TestStress_FiftyTruckFlow(t *testing.T) {
 }
 
 // verifyTrucks verifies all trucks in all databases
-func verifyTrucks(ctx context.Context, t *testing.T, truckIDs []string, pgDB *sql.DB, redisClient *redis.Client, esClient *elasticsearch.TypedClient) {
+func verifyTrucks(ctx context.Context, t *testing.T, truckIDs []string, pgDB *pgx.Conn, redisClient *redis.Client, esClient *elasticsearch.TypedClient) {
 	fmt.Println("  Verifying in all databases...")
 
 	// Track verification results
@@ -253,7 +261,7 @@ func verifyTrucks(ctx context.Context, t *testing.T, truckIDs []string, pgDB *sq
 
 		// Postgres check
 		var count int
-		postgresErr := pgDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM location_history WHERE truck_id=$1", truckID).Scan(&count)
+        postgresErr := pgDB.QueryRow(ctx, "SELECT COUNT(*) FROM location_history WHERE truck_id=$1", truckID).Scan(&count)
 		if postgresErr == nil && count > 0 {
 			postgresOK++
 		}
