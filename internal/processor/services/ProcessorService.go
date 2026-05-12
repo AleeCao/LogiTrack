@@ -6,6 +6,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"log"
 	"math"
 	"sync"
 
@@ -14,35 +15,40 @@ import (
 )
 
 type ProcessorService struct {
-	StorageRepo ports.StorageRepository
-	CacheRepo   ports.CacheRepository
-	SearchRepo  ports.SearchRepository
+	CacheRepo  ports.CacheRepository
+	SearchRepo ports.SearchRepository
 }
 
-func NewProcessorService(str ports.StorageRepository, ca ports.CacheRepository, srch ports.SearchRepository) ports.ProcessService {
-	return &ProcessorService{StorageRepo: str, CacheRepo: ca, SearchRepo: srch}
+func NewProcessorService(ca ports.CacheRepository, srch ports.SearchRepository) ports.ProcessService {
+	return &ProcessorService{CacheRepo: ca, SearchRepo: srch}
 }
 
-func (s *ProcessorService) ProcessLocation(ctx context.Context, locations <-chan domain.Location, wg *sync.WaitGroup) error {
+func (s *ProcessorService) ProcessLocationRecord(ctx context.Context, locations <-chan *domain.Location, cacheChan chan *domain.Location, storageChan chan *domain.Location, wg *sync.WaitGroup) error {
 	defer wg.Done()
-	for lcn := range locations {
-		fmt.Printf("Processing location for truck: %s\n", lcn.TruckID)
-		lastLcn, err := s.CacheRepo.GetLocationRecord(ctx, lcn.TruckID)
+
+	for currentLcn := range locations {
+		fmt.Printf("Processing location for truck: %s\n", currentLcn.TruckID)
+		lastLcn, err := s.CacheRepo.GetLocationRecord(ctx, currentLcn.TruckID)
 		if err != nil {
 			fmt.Printf("Error getting location record: %v\n", err)
 			return err
 		}
-		if s.checkLastUpdate(lastLcn, &lcn) {
+		if s.checkLastUpdate(lastLcn, currentLcn) {
 			fmt.Println("Last Update check passed")
-			if s.checkDistance(&lcn, lastLcn) {
+			if s.checkDistance(currentLcn, lastLcn) {
 				fmt.Println("Distance check passed")
-				if err := s.CacheRepo.SetLocationRecord(ctx, &lcn); err != nil {
-					fmt.Printf("Error setting location record: %v\n", err)
-					return err
+				select {
+				case cacheChan <- currentLcn:
+				case <-ctx.Done():
+					log.Println("Context cancelled while publishing on cache channel")
+					return ctx.Err()
 				}
-				if err := s.StorageRepo.CreateLocationRecord(ctx, &lcn); err != nil {
-					fmt.Printf("Error creating location record: %v\n", err)
-					return err
+
+				select {
+				case storageChan <- currentLcn:
+				case <-ctx.Done():
+					log.Println("Context cancelled while publishing on strage channel")
+					return ctx.Err()
 				}
 			} else {
 				fmt.Println("Distance check failed")
@@ -50,17 +56,26 @@ func (s *ProcessorService) ProcessLocation(ctx context.Context, locations <-chan
 		} else {
 			fmt.Println("Last Update check failed")
 		}
-		if err := s.SearchRepo.UpdateTruckLocation(ctx, &lcn); err != nil {
-			fmt.Printf("Error updating search repo: %v\n", err)
-			return err
-		}
 	}
 	fmt.Println("Worker shutting down")
 	return nil
 }
 
+func (s *ProcessorService) ProcessLocationSearch(ctx context.Context, locations <-chan *domain.Location, wg *sync.WaitGroup) error {
+	defer wg.Done()
+
+	for currentLcn := range locations {
+		if err := s.SearchRepo.UpdateTruckLocation(ctx, currentLcn); err != nil {
+			fmt.Printf("Error updating search repo: %v\n", err)
+			return err
+		}
+	}
+	log.Println("Worker shutting down")
+	return nil
+}
+
 func (s *ProcessorService) checkLastUpdate(lcn1 *domain.Location, lcn2 *domain.Location) bool {
-	if lcn2 == nil {
+	if lcn1 == nil {
 		return true
 	}
 	return lcn2.UpdatedAt.After(lcn1.UpdatedAt)
