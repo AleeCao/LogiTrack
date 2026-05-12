@@ -3,6 +3,7 @@ package adapters
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"github.com/AleeCao/LogiTrack/internal/domain"
 	"github.com/AleeCao/LogiTrack/internal/processor/ports"
@@ -17,11 +18,25 @@ func NewCacheRepository(srv *redis.Client) ports.CacheRepository {
 	return &CacheRepository{srv}
 }
 
-func (a *CacheRepository) SetLocationRecord(ctx context.Context, lcn *domain.Location) error {
-	if err := a.srv.HSet(ctx, lcn.TruckID, lcn).Err(); err != nil {
-		return fmt.Errorf("failed to set location record: %w", err)
+func (a *CacheRepository) SendBatch(ctx context.Context, buffer *[]*domain.Location) {
+	if len(*buffer) == 0 {
+		return
 	}
-	return nil
+
+	pipe := a.srv.Pipeline()
+
+	for _, op := range *buffer {
+		if err := pipe.HSet(ctx, op.TruckID, op).Err(); err != nil {
+			log.Println("failed to set location record: ", err)
+		}
+	}
+
+	_, err := pipe.Exec(ctx)
+	if err != nil {
+		log.Println("error dispatching: ", err)
+	}
+
+	*buffer = nil
 }
 
 func (a *CacheRepository) GetLocationRecord(ctx context.Context, truckID string) (*domain.Location, error) {
@@ -29,11 +44,10 @@ func (a *CacheRepository) GetLocationRecord(ctx context.Context, truckID string)
 
 	// Check if the key exists in Redis first
 	if data.Err() != nil {
-		// Key doesn't exist (first time for this truck) - this is NOT an error
+		// Key doesn't exist (first time for this truck)
 		if data.Err() == redis.Nil {
 			return nil, nil
 		}
-		// Actual error (connection issue, etc.)
 		return nil, fmt.Errorf("failed to get location record: %w", data.Err())
 	}
 
